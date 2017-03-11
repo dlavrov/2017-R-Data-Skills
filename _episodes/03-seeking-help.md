@@ -115,20 +115,41 @@ sessionInfo()
 
 ~~~
 R version 3.3.2 (2016-10-31)
-Platform: x86_64-apple-darwin16.1.0 (64-bit)
-Running under: macOS Sierra 10.12.2
+Platform: x86_64-apple-darwin13.4.0 (64-bit)
+Running under: OS X El Capitan 10.11.6
 
 locale:
 [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
 
 attached base packages:
-[1] stats     graphics  grDevices utils     datasets  base     
+[1] stats4    parallel  methods   stats     graphics  grDevices utils    
+[8] datasets  base     
 
 other attached packages:
-[1] checkpoint_0.3.18 stringr_1.1.0     knitr_1.15.1     
+ [1] ggplot2_2.2.1                      VariantAnnotation_1.20.2          
+ [3] RNAseqData.HNRNPC.bam.chr14_0.12.0 ShortRead_1.32.0                  
+ [5] GenomicAlignments_1.10.0           Rsamtools_1.26.1                  
+ [7] BiocParallel_1.8.1                 rtracklayer_1.34.2                
+ [9] airway_0.108.0                     SummarizedExperiment_1.4.0        
+[11] Biobase_2.34.0                     GenomicRanges_1.26.2              
+[13] GenomeInfoDb_1.10.3                Biostrings_2.42.1                 
+[15] XVector_0.14.0                     IRanges_2.8.1                     
+[17] S4Vectors_0.12.1                   BiocGenerics_0.20.0               
+[19] checkpoint_0.3.18                  stringr_1.2.0                     
+[21] knitr_1.15.1                      
 
 loaded via a namespace (and not attached):
-[1] magrittr_1.5  tools_3.3.2   stringi_1.1.2 methods_3.3.2 evaluate_0.10
+ [1] Rcpp_0.12.9            plyr_1.8.4             highr_0.6             
+ [4] RColorBrewer_1.1-2     GenomicFeatures_1.26.3 bitops_1.0-6          
+ [7] tools_3.3.2            zlibbioc_1.20.0        biomaRt_2.30.0        
+[10] digest_0.6.12          tibble_1.2             gtable_0.2.0          
+[13] evaluate_0.10          RSQLite_1.1-2          memoise_1.0.0         
+[16] lattice_0.20-34        BSgenome_1.42.0        Matrix_1.2-7.1        
+[19] DBI_0.5-1              hwriter_1.3.2          grid_3.3.2            
+[22] AnnotationDbi_1.36.2   XML_3.98-1.5           latticeExtra_0.6-28   
+[25] magrittr_1.5           scales_0.4.1           assertthat_0.1        
+[28] colorspace_1.3-2       labeling_0.3           stringi_1.1.2         
+[31] lazyeval_0.2.0         munsell_0.4.3          RCurl_1.95-4.8        
 ~~~
 {: .output}
 
@@ -144,7 +165,7 @@ your issue.
 > ~~~
 > c(1, 2, 3)
 > c('d', 'e', 'f')
-> c(1, 2, 'f')`
+> c(1, 2, 'f')
 > ~~~
 > {: .r}
 > > ## Solution to Challenge 1

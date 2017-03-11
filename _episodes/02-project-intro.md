@@ -1,5 +1,5 @@
 ---
-title: "Project Management With RStudio"
+title: "A Crash Course in Genomic Ranges and Coordinate Systems"
 teaching: 20
 exercises: 10
 questions:
@@ -17,250 +17,445 @@ keypoints:
 
 
 
-## Introduction
+## Introduction (Chapter 9)
 
-The scientific process is naturally incremental, and many projects
-start life as random notes, some code, then a manuscript, and
-eventually everything is a bit mixed together.
+Many types of genomic data are linked to a specific genomic region, which can be 
+represented as a range containing consecutive positions on a chromosome. Annotation data 
+genomic features, and statistics like pairwise diversity and GC content 
+can all be represented as ranges on a linear chromosome sequence. Sequencing read alignment 
+data can also be represented as ranges.
 
-<blockquote class="twitter-tweet"><p>Managing your projects in a reproducible fashion doesn't just make your science reproducible, it makes your life easier.</p>— Vince Buffalo (@vsbuffalo) <a href="https://twitter.com/vsbuffalo/status/323638476153167872">April 15, 2013</a></blockquote>
-<script async src="//platform.twitter.com/widgets.js" charset="utf-8"></script>
+Once our genomic data is represented as ranges on chromosomes, range 
+operations can be used for finding and counting overlaps, calculating 
+coverage, finding nearest ranges, and extracting nucleotide sequences from specific ranges. 
+Specific problems like finding which SNPs overlap coding sequences, or counting the number 
+of read alignments that overlap an exon have simple, general solutions once we represent our 
+data as ranges and reshape our problem into one we can solve with range operations.
 
-Most people tend to organize their projects like this:
+To specify a genomic region or position, we need three pieces of information:
 
-![](../fig/bad_layout.png)
+* Chromosome name
+> This is also known as sequence name (to allow for sequences that aren’t fully assembled, 
+> such as scaffolds or contigs). Rather unfortunately, there is no standard naming 
+> scheme for chromosome names across biology (and this will cause you headaches). Examples of 
+> chromosome names include “chr17,” “22,” “chrX,” “Y,” and “MT”, or 
+> scaffolds like “HE667775” or “scaffold_1648.” 
 
-There are many reasons why we should *ALWAYS* avoid this:
+* Range
+> For example, 114,414,997 to 114,693,772 or 3,173,498 to 3,179,449. Ranges are how we specify 
+> a single subsequence on a chromosome sequence. Each range is composed of a start position and 
+> an end position. As with chromosome names, there’s no standard way to represent a range in bioinformatics.
 
-1. It is really hard to tell which version of your data is
-the original and which is the modified;
-2. It gets really messy because it mixes files with various
-extensions together;
-3. It probably takes you a lot of time to actually find
-things, and relate the correct figures to the exact code
-that has been used to generate it;
+* Strand
+> Because chromosomal DNA is double-stranded, features can reside on either the forward (positive) 
+> or reverse (negative) strand.
 
-A good project layout will ultimately make your life easier:
+These three components make up a genomic range (also know as a genomic interval). Note that because 
+reference genomes are our coordinate system for ranges, ranges are completely linked to a specic 
+genome version. In other words, genomic locations are relative to reference genomes, so when working 
+with and speaking about ranges we need to specify the version of genome they’re relative to.
 
-* It will help ensure the integrity of your data;
-* It makes it simpler to share your code with someone else
-(a lab-mate, collaborator, or supervisor);
-* It allows you to easily upload your code with your manuscript submission;
-* It makes it easier to pick the project back up after a break.
+The following figure depicts three ranges along a stretch of chromosome. Ranges x and y overlap each 
+other (with a one base pair overlap), while range z is not overlapping any other range (and spans just 
+a single base pair). Ranges x and z are both on the forward DNA strand , and their underlying 
+nucleotide sequences are ACTT and C, respectively; range y is on the reverse strand, and its 
+nucleotide sequence would be AGCCTTCGA.
 
-## A possible solution
+![Three ranges on an imaginary stretch of chromosome (Fig. 9-1 in Buffolo, 2015)](../fig/ranges.png)
 
-Fortunately, there are tools and packages which can help you manage your work effectively.
-
-One of the most powerful and useful aspects of RStudio is its project management
-functionality. We'll be using this today to create a self-contained, reproducible
-project.
-
-
-> ## Challenge: Creating a self-contained project
+>  ## Reference Genome Versions
+> Assembling and curating reference genomes is a continuous effort, and reference genomes are 
+> perpetually changing and improving. Unfortunately, this also means that our coordinate system will 
+> often change between genome versions, so a genomic region like chr15:27,754,876-27,755,076 will 
+> not refer to the same genomic location across different genome versions. Thus genomic locations 
+> are always relative to specific reference genomes versions. For reproducibility’s sake, it’s vital 
+> to specify which version of reference genome you’re working with. 
 >
-> We're going to create a new project in RStudio:
->
-> 1. Click the "File" menu button, then "New Project".
-> 2. Click "New Directory".
-> 3. Click "Empty Project".
-> 4. Type in the name of the directory to store your project, e.g. "my_project".
-> 5. Make sure that the checkbox for "Create a git repository" is selected.
-> 6. Click the "Create Project" button.
-{: .challenge}
-
-Now when we start R in this project directory, or open this project with RStudio,
-all of our work on this project will be entirely self-contained in this directory.
-
-## Best practices for project organization
-
-Although there is no "best" way to lay out a project, there are some general
-principles to adhere to that will make project management easier:
-
-### Treat data as read only
-
-This is probably the most important goal of setting up a project. Data is
-typically time consuming and/or expensive to collect. Working with them
-interactively (e.g., in Excel) where they can be modified means you are never
-sure of where the data came from, or how it has been modified since collection.
-It is therefore a good idea to treat your data as "read-only".
-
-### Data Cleaning
-
-In many cases your data will be "dirty": it will need significant preprocessing
-to get into a format R (or any other programming language) will find useful. This
-task is sometimes called "data munging". I find it useful to store these scripts
-in a separate folder, and create a second "read-only" data folder to hold the
-"cleaned" data sets.
-
-### Treat generated output as disposable
-
-Anything generated by your scripts should be treated as disposable: it should
-all be able to be regenerated from your scripts.
-
-There are lots of different ways to manage this output. I find it useful to
-have an output folder with different sub-directories for each separate
-analysis. This makes it easier later, as many of my analyses are exploratory
-and don't end up being used in the final project, and some of the analyses
-get shared between projects.
-
-> ## Tip: Good Enough Practices for Scientific Computing
->
-> [Good Enough Practices for Scientific Computing](https://github.com/swcarpentry/good-enough-practices-in-scientific-computing/blob/gh-pages/good-enough-practices-for-scientific-computing.pdf) gives the following recommendations for project organization:
->
-> 1. Put each project in its own directory, which is named after the project.
-> 2. Put text documents associated with the project in the `doc` directory.
-> 3. Put raw data and metadata in the `data` directory, and files generated during cleanup and analysis in a `results` directory.
-> 4. Put source for the project's scripts and programs in the `src` directory, and programs brought in from elsewhere or compiled locally in the `bin` directory.
-> 5. Name all files to reflect their content or function.
+> At some point, you’ll need to remap genomic range data from an older genome version’s coordinate 
+> system to a newer version’s coordinate system. This would be a tedious undertaking, but luckily 
+> there are established tools for the task:
+> * CrossMap is a command-line tool that converts many data formats (BED, GFF/ GTF, SAM/BAM, Wiggle, 
+> VCF) between coordinate systems of different assembly versions.
+> * NCBI Genome Remapping Service is a web-based tool supporting a variety of genomes and formats.
+> * LiftOver is also a web-based tool for converting between genomes hosted on the UCSC Genome Browser’s site.
 >
 {: .callout}
 
-> ## Tip: ProjectTemplate - a possible solution
->
-> One way to automate the management of projects is to install the third-party package, `ProjectTemplate`.
-> This package will set up an ideal directory structure for project management.
-> This is very useful as it enables you to have your analysis pipeline/workflow organised and structured.
-> Together with the default RStudio project functionality and Git you will be able to keep track of your
-> work as well as be able to share your work with collaborators.
->
-> 1. Install `ProjectTemplate`.
-> 2. Load the library
-> 3. Initialise the project:
->
-> 
-> ~~~
-> install.packages("ProjectTemplate")
-> library(ProjectTemplate)
-> create.project("../my_project", merge.strategy = "allow.non.conflict")
-> ~~~
-> {: .r}
->
-> For more information on ProjectTemplate and its functionality visit the
-> home page [ProjectTemplate](http://projecttemplate.net/index.html)
-{: .callout}
+Despite the convenience that comes with representing and working with genomic ranges, there are 
+unfortunately some gritty details we need to be aware of. First, there are two different flavors of 
+range systems used by bioinformatics data formats (see Table 9-1 for a reference) and software programs:
+* 0-based coordinate system, with half-closed, half-open intervals.
+* 1-based coordinate system, with closed intervals.
+With 0-based coordinate systems, the first base of a sequence is position 0 and the last base’s position 
+is the length of the sequence - 1. In this 0-based coordinate system, we use half-closed, half-open intervals. 
 
-### Separate function definition and application
+The second flavor is 1-based. As you might have guessed, with 1-based systems the first base of a sequence is given the position 1. Because positions are counted as we do natural numbers, the last position in a sequence is always equal to its length. With the 1-based systems we encounter in bioinformatics, ranges are represented as closed intervals. **Note**, there is an error in nucleotide numbering in Fig. 9-2 of the book.
 
-The most effective way I find to work in R, is to play around in the interactive
-session, then copy commands across to a script file when I'm sure they work and
-do what I want. You can also save all the commands you've entered using the
-`history` command, but I don't find it useful because when I'm typing its 90%
-trial and error.
+![Range types of common bioinformatics formats (Table. 9-1 in Buffolo, 2015)](../fig/formats.png)
 
-When your project is new and shiny, the script file usually contains many lines
-of directly executed code. As it matures, reusable chunks get pulled into their
-own functions. It's a good idea to separate these into separate folders; one
-to store useful functions that you'll reuse across analyses and projects, and
-one to store the analysis scripts.
+The second gritty detail we need to worry about is strand. There’s little to say except: 
+you need to mind strand in your work. Because DNA is double stranded, genomic features can 
+lie on either strand. Across nearly all range formats (BLAST results being the exception), 
+a range’s coordinates are given on the forward strand of the reference sequence.
 
-> ## Tip: avoiding duplication
->
-> You may find yourself using data or analysis scripts across several projects.
-> Typically you want to avoid duplication to save space and avoid having to
-> make updates to code in multiple places.
->
-> In this case I find it useful to make "symbolic links", which are essentially
-> shortcuts to files somewhere else on a filesystem. On Linux and OS X you can
-> use the `ln -s` command, and on Windows you can either create a shortcut or
-> use the `mklink` command from the windows terminal.
-{: .callout}
+## An Interactive Introduction to Range Data with GenomicRanges
 
-### Save the data in the data directory
+To get a feeling for representing and working with data as ranges on a chromosome, we’ll 
+step through creating ranges and using range operations with the Bioconductor packages 
+IRanges and GenomicRanges.
 
-Now we have a good directory structure we will now place/save the data file in the `data/` directory.
+### Storing Generic Ranges with IRanges
 
-> ## Challenge 1
-> Download the gapminder data from [here](https://raw.githubusercontent.com/resbaz/r-novice-gapminder-files/master/data/gapminder-FiveYearData.csv).
->
-> 1. Download the file (CTRL + S, right mouse click -> "Save as", or File -> "Save page as")
-> 2. Make sure it's saved under the name `gapminder-FiveYearData.csv`
-> 3. Save the file in the `data/` folder within your project.
->
-> We will load and inspect these data later.
-{: .challenge}
+Before diving into working with genomic ranges, we’re going to get our feet wet with generic ranges 
+(i.e., ranges that represent a contiguous subsequence of elements over any type of sequence) using 
+the Bioconductor’s IRanges package. This package implements data structures for generic ranges and 
+sequences, as well as the necessary functions to work with these types of data in R.
 
-> ## Challenge 2
-> It is useful to get some general idea about the dataset, directly from the
-> command line, before loading it into R. Understanding the dataset better
-> will come handy when making decisions on how to load it in R. Use command-line
-> shell to answer the following questions:
-> 1. What is the size of the file?
-> 2. How many rows of data does it contain?
-> 3. What are the data types of values stored in this file
->
-> > ## Solution to Challenge 2
-> >
-> > By running these commands in the shell:
-> > 
-> > ~~~
-> > ls -lh data/gapminder-FiveYearData.csv
-> > ~~~
-> > {: .r}
-> > 
-> > 
-> > 
-> > 
-> > ~~~
-> > -rw-r--r--  1 naupaka  staff    80K Jul 19 12:32 data/gapminder-FiveYearData.csv
-> > ~~~
-> > {: .output}
-> > The file size is 80K.
-> > 
-> > ~~~
-> > wc -l data/gapminder-FiveYearData.csv
-> > ~~~
-> > {: .r}
-> > 
-> > 
-> > 
-> > 
-> > ~~~
-> >     1705 data/gapminder-FiveYearData.csv
-> > ~~~
-> > {: .output}
-> > There are 1705 lines and the data looks like:
-> > 
-> > ~~~
-> > head data/gapminder-FiveYearData.csv
-> > ~~~
-> > {: .r}
-> > 
-> > 
-> > 
-> > 
-> > ~~~
-> > country,year,pop,continent,lifeExp,gdpPercap
-> > Afghanistan,1952,8425333,Asia,28.801,779.4453145
-> > Afghanistan,1957,9240934,Asia,30.332,820.8530296
-> > Afghanistan,1962,10267083,Asia,31.997,853.10071
-> > Afghanistan,1967,11537966,Asia,34.02,836.1971382
-> > Afghanistan,1972,13079460,Asia,36.088,739.9811058
-> > Afghanistan,1977,14880372,Asia,38.438,786.11336
-> > Afghanistan,1982,12881816,Asia,39.854,978.0114388
-> > Afghanistan,1987,13867957,Asia,40.822,852.3959448
-> > Afghanistan,1992,16317921,Asia,41.674,649.3413952
-> > ~~~
-> > {: .output}
-> {: .solution}
-{: .challenge}
+Let’s get started by creating some ranges using IRanges. First, load the IRanges package:
 
-> ## Tip: command line in R Studio
->
-> You can quickly open up a shell in RStudio using the **Tools -> Shell...** menu item.
-{: .callout}
 
-### Version Control
+~~~
+library(IRanges)
+~~~
+{: .r}
 
-We also set up our project to integrate with git, putting it under version control.
-RStudio has a nicer interface to git than shell, but is very limited in what it can
-do, so you will find yourself occasionally needing to use the shell. Let's go
-through and make an initial commit of our template files.
+The ranges we create with the IRanges package are called IRanges objects. Each IRanges object has the 
+two basic components of any range: a start and end position. We can create ranges with the IRanges() function:
 
-The workspace/history pane has a tab for "Git". We can stage each file by checking the box:
-you will see a green "A" next to stage files and folders, and yellow question marks next to
-files or folders git doesn't know about yet. RStudio also nicely shows you the difference
-between files from different commits.
+
+~~~
+rng <- IRanges(start=4, end=13)
+rng
+~~~
+{: .r}
+
+
+
+~~~
+IRanges object with 1 range and 0 metadata columns:
+          start       end     width
+      <integer> <integer> <integer>
+  [1]         4        13        10
+~~~
+{: .output}
+
+The most important fact to note: IRanges (and GenomicRanges) is 1-based, and uses closed intervals. 
+The 1-based system was adopted to be consistent with R’s 1-based system
+
+You can also create ranges by specifying their width, and either start or end position:
+
+
+~~~
+IRanges(start=4, width=3)
+~~~
+{: .r}
+
+
+
+~~~
+IRanges object with 1 range and 0 metadata columns:
+          start       end     width
+      <integer> <integer> <integer>
+  [1]         4         6         3
+~~~
+{: .output}
+
+
+
+~~~
+IRanges(end=5, width=5)
+~~~
+{: .r}
+
+
+
+~~~
+IRanges object with 1 range and 0 metadata columns:
+          start       end     width
+      <integer> <integer> <integer>
+  [1]         1         5         5
+~~~
+{: .output}
+
+Also, the IRanges() constructor (a function that creates a new object) can take vector arguments, 
+creating an IRanges object containing many ranges:
+
+
+~~~
+x <- IRanges(start=c(4, 7, 2, 20), end=c(13, 7, 5, 23))
+x
+~~~
+{: .r}
+
+
+
+~~~
+IRanges object with 4 ranges and 0 metadata columns:
+          start       end     width
+      <integer> <integer> <integer>
+  [1]         4        13        10
+  [2]         7         7         1
+  [3]         2         5         4
+  [4]        20        23         4
+~~~
+{: .output}
+
+Like many R objects, each range can be given a name. This can be accomplished by setting the names 
+argument in IRanges, or using the function names():
+
+
+~~~
+names(x) <- letters[1:4]
+x
+~~~
+{: .r}
+
+
+
+~~~
+IRanges object with 4 ranges and 0 metadata columns:
+        start       end     width
+    <integer> <integer> <integer>
+  a         4        13        10
+  b         7         7         1
+  c         2         5         4
+  d        20        23         4
+~~~
+{: .output}
+
+These four ranges are depicted in the figure below, using the `plotIRanges()` function from Buffalo's 
+book’s GitHub repository (requires ggplot). 
+
+
+~~~
+library("ggplot2")
+source("../src/plot-ranges.R")
+~~~
+{: .r}
+
+While on the outside x may look like a dataframe, it’s not—it’s a special object with class IRanges. 
+Much of Bioconductor is built from objects and classes. Using the function class(), we can see it’s an IRanges object:
+
+
+~~~
+class(x)
+~~~
+{: .r}
+
+
+
+~~~
+[1] "IRanges"
+attr(,"package")
+[1] "IRanges"
+~~~
+{: .output}
+
+
+~~~
+plotIRanges(x)
+~~~
+{: .r}
+
+<img src="../fig/rmd-02-unnamed-chunk-9-1.png" title="plot of chunk unnamed-chunk-9" alt="plot of chunk unnamed-chunk-9" style="display: block; margin: auto;" />
+
+IRanges objects contain all information about the ranges you’ve created internally. 
+If you’re curious what’s under the hood, call `str(x)` to take a peek. We can use 
+accessor functions to get parts of an IRanges object. For example, you can access 
+the start positions, end positions, and widths of each range in this object with 
+the methods `start()`, `end()`, and `width()`:
+
+
+~~~
+start(x)
+~~~
+{: .r}
+
+
+
+~~~
+[1]  4  7  2 20
+~~~
+{: .output}
+
+
+
+~~~
+end(x)
+~~~
+{: .r}
+
+
+
+~~~
+[1] 13  7  5 23
+~~~
+{: .output}
+
+
+
+~~~
+width(x)
+~~~
+{: .r}
+
+
+
+~~~
+[1] 10  1  4  4
+~~~
+{: .output}
+
+These functions also work with <- to set start, end, and width position
+
+
+~~~
+end(x) <- end(x) + 4
+x
+~~~
+{: .r}
+
+
+
+~~~
+IRanges object with 4 ranges and 0 metadata columns:
+        start       end     width
+    <integer> <integer> <integer>
+  a         4        17        14
+  b         7        11         5
+  c         2         9         8
+  d        20        27         8
+~~~
+{: .output}
+
+The `range()` method returns the span of the ranges kept in an IRanges object:
+
+
+~~~
+range(x)
+~~~
+{: .r}
+
+
+
+~~~
+IRanges object with 1 range and 0 metadata columns:
+          start       end     width
+      <integer> <integer> <integer>
+  [1]         2        27        26
+~~~
+{: .output}
+
+We can subset IRanges just as we would any other R objects (vectors, dataframes, matrices), 
+using either numeric, logical, or character (name) index:
+
+
+~~~
+x[2:3]
+~~~
+{: .r}
+
+
+
+~~~
+IRanges object with 2 ranges and 0 metadata columns:
+        start       end     width
+    <integer> <integer> <integer>
+  b         7        11         5
+  c         2         9         8
+~~~
+{: .output}
+
+
+
+~~~
+start(x) < 5
+~~~
+{: .r}
+
+
+
+~~~
+[1]  TRUE FALSE  TRUE FALSE
+~~~
+{: .output}
+
+
+
+~~~
+x[start(x) < 5]
+~~~
+{: .r}
+
+
+
+~~~
+IRanges object with 2 ranges and 0 metadata columns:
+        start       end     width
+    <integer> <integer> <integer>
+  a         4        17        14
+  c         2         9         8
+~~~
+{: .output}
+
+
+
+~~~
+x[width(x) > 8]
+~~~
+{: .r}
+
+
+
+~~~
+IRanges object with 1 range and 0 metadata columns:
+        start       end     width
+    <integer> <integer> <integer>
+  a         4        17        14
+~~~
+{: .output}
+
+
+
+~~~
+x['a']
+~~~
+{: .r}
+
+
+
+~~~
+IRanges object with 1 range and 0 metadata columns:
+        start       end     width
+    <integer> <integer> <integer>
+  a         4        17        14
+~~~
+{: .output}
+
+Ranges can also be easily merged using the function c(), just as we used to combine vectors:
+
+
+~~~
+a <- IRanges(start=7, width=4)
+b <- IRanges(start=2, end=5)
+c(a, b)
+~~~
+{: .r}
+
+
+
+~~~
+IRanges object with 2 ranges and 0 metadata columns:
+          start       end     width
+      <integer> <integer> <integer>
+  [1]         7        10         4
+  [2]         2         5         4
+~~~
+{: .output}
+
+With the basics of IRanges objects under our belt, we’re now ready to look at some basic range operations.
+
+### Basic Range Operations: Arithmetic, Transformations, and Set Operations
 
 > ## Tip: versioning disposable output
 >

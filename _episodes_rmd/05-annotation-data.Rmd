@@ -1,0 +1,642 @@
+---
+title: "Working with Annotation Data"
+teaching: 60
+exercises: 30
+questions:
+- "How can I use Genomic Ranges with real data?"
+objectives:
+- "Be able to retreive genomic regions "
+- "Be able to group genomic regions"
+- "Be able to append two data frames"
+- "Be able to articulate what a `factor` is and how to convert between `factor` and `character`."
+- "Be able to find basic properties of a data frames including size, class or type of the columns, names, and first few rows."
+keypoints:
+- "Use `cbind()` to add a new column to a data frame."
+- "Use `rbind()` to add a new row to a data frame."
+- "Remove rows from a data frame."
+- "Use `na.omit()` to remove rows from a data frame with `NA` values."
+- "Use `levels()` and `as.character()` to explore and manipulate factors"
+- "Use `str()`, `nrow()`, `ncol()`, `dim()`, `colnames()`, `rownames()`, `head()` and `typeof()` to understand structure of the data frame"
+- "Read in a csv file using `read.csv()`"
+- "Understand `length()` of a data frame"
+---
+
+```{r, include=FALSE}
+source("../bin/chunk-options.R")
+knitr_fig_path("05-")
+library(GenomicRanges)
+library(TxDb.Mmusculus.UCSC.mm10.ensGene)
+library(rtracklayer)
+library(BSgenome.Mmusculus.UCSC.mm10)
+library(BSgenome)
+dbsnp137 <- import("../data/mm10_snp137_chr1_trunc.bed.gz")
+```
+
+## GenomicFeatures and rtracklayer
+
+Here we will learn about two Bioconductor packages for importing and working with external data. Both 
+packages have different purposes and connect with GenomicRanges. The first, GenomicFeatures, is designed 
+for working with transcript-based genomic annotations. The second, rtracklayer, is designed for importing 
+and exporting annotation data into a variety of different formats. 
+
+### GenomicFeatures and TranscriptDb objects
+
+GenomicFeatures provides methods for creating and working with TranscriptDb objects. These TranscriptDb 
+objects wrap annotation data in a way that allows genomic features, like genes, transcripts, exons, and 
+coding sequences (CDS), to be extracted in a consistent way, regardless of the organism and origin of 
+the annotation data.
+
+> ## R Packages for Data
+>
+>  While it may sound strange to use an R package that contains data rather than R code, it’s actually 
+> a clever and appropriate use of an R package. Bioconductor uses packages for many types of data, including 
+> transcript and organism annotation data, experimental data, compressed reference genomes, and microarray 
+> and SNP platform details. Packages are a terrific way to unite data from multiple sources into a single 
+> easily loaded and explicitly versioned shared resource.
+>
+{: .callout}
+
+Let’s start by installing GenomicFeatures and the transcript annotation package for mouse, _Mus musculus_ 
+(We can check which annotation packages are available on the [Bioconductor annotation package page](http://www.bioconductor.org/packages/release/data/annotation/)):
+
+```{r, eval=FALSE}
+library(BiocInstaller)
+biocLite("GenomicFeatures")
+biocLite("TxDb.Mmusculus.UCSC.mm10.ensGene")
+```
+
+Notice that all transcript annotation packages use the same naming scheme:
+TxDb.<organism>.<annotation-source>.<annotation-version>. This annotation is for mouse genome version 
+mm10 (Genome Reference Consortium version GRCm38), and the annotation comes from UCSC’s Ensembl track.
+
+Now we can start working with the data:
+
+```{r}
+library(TxDb.Mmusculus.UCSC.mm10.ensGene)
+txdb <- TxDb.Mmusculus.UCSC.mm10.ensGene
+txdb
+class(txdb)
+```
+
+Under the hood, the transcriptDb object represents a SQLite database contained inside this R package. We 
+don’t need to know any SQLite to interact with and extract data from this object; the GenomicFeatures package 
+provides all methods we’ll need.
+
+#### Retrieving genomic regions using `genes()`, `transcripts()`, `exons()`, `cds()`, and `promoters()`
+
+Suppose we wanted to access all gene regions in _Mus musculus_ (in this version of Ensembl annotation). 
+There’s a simple accessor function for this, unsurprisingly named `genes()`:
+
+```{r}
+mm_genes <- genes(txdb)
+head(mm_genes)
+length(mm_genes)
+```
+
+GenomicFeatures has other functions for retrieving all transcripts, exons, coding sequences (CDS), 
+and promoters: `transcripts()`, `exons()`, `cds()`, and `promoters()`. Consult the documentation 
+for this family of functions for extracting information from transcriptDb objects at `help(transcripts)`.
+
+#### Grouping GRangesList objects by transcript, gene, etc.
+
+It’s often more natural to work with a GRangesList object of these types of features grouped by some other type of feature than working with a massive GRanges list object of everything. For example, we might want to retrieve all exons grouped by transcript or gene:
+
+```{r}
+mm_exons_by_tx <- exonsBy(txdb, by="tx")
+mm_exons_by_gn <- exonsBy(txdb, by="gene")
+length(mm_exons_by_tx)
+length(mm_exons_by_gn)
+head(mm_exons_by_gn)
+```
+
+These functions that extract grouped features all take the transcriptDb object as their first argument 
+and which type of feature to group by (e.g., gene, tx, exon, or cds) as their second argument. There 
+are variety of these types of functions: `transcriptsBy()`, `exonsBy()`, `cdsBy()`, `intronsBy()`, 
+`fiveUTRsByTranscript()`, and `threeUTRsByTranscript()` (see `help(transcriptsBy)` for more information).
+
+#### Extracting subsets of features that overlap a specific chromosome
+
+GenomicFeatures also provides functions for extracting subsets of features that overlap a specific 
+chromosome or range. We can limit our queries to use a subset of chromosomes by setting which sequences 
+our transcriptDb should query using the following approach:
+
+```{r}
+seqlevels(txdb)
+seqlevels(txdb, force=TRUE) <- "chr1"
+seqlevels(txdb)
+chr1_exons <- exonsBy(txdb, "tx")
+all(unlist(seqnames(chr1_exons)) == "chr1")
+txdb <- restoreSeqlevels(txdb) # restore txdb so it queries all sequences
+```
+
+#### Extracting subsets of features that overlap a specific chromosome
+
+To extract feature data that only overlaps a specific region, use the following family of functions: 
+`transcriptsByOverlaps()`, `exonsByOverlaps()`, and `cdsByOverlaps()` (see `help(transcriptByOverlaps()` 
+for more information).
+
+For example, say a QTL study has identified a quantitative trait loci in the region roughly on 
+chromosome 8, from 123,260,562 to 123,557,264. Our coordinates are rough, so we’ll add 10kbp and 
+get all genes within this expanded region:
+
+```{r}
+qtl_region <- GRanges("chr8", IRanges(123260562, 123557264))
+qtl_region
+qtl_region_expanded <- qtl_region + 10e3
+transcriptsByOverlaps(txdb, qtl_region_expanded)
+```
+
+`transcriptByOverlaps()` returns all transcripts overlapping this range. All functions in this 
+family also take a maxgap argument, which can be used to specify how large a gap between ranges 
+is considered an overlap (0 by default). Setting the maxgap argument to 10kbp has the same effect 
+as widening our ranges and then extracting elements as we did in the preceding example.
+
+> ## Creating TranscriptDb Objects
+>
+> If there isn’t a transcript annotation package containing a transcriptDb object for your organism, 
+> annotation track, or genome version of choice, GenomicFeatures provides a multitude of methods to 
+> create one. If the annotation track you’d like to use is on the UCSC Genome Browser or a BioMart 
+> (e.g., a data management system used by databases Ensembl and WormBase), GenomicFeatures contains the 
+> functions make `TranscriptDbFromUCSC()` and `makeTranscriptDbFromBiomart()` for creating transcriptDb 
+> from these databases. For some nonmodel systems, annotation only exists as a Gene Transfer Format (GTF) 
+> or Gene Feature Format (GFF) file. In this case, a transcriptDb object can be created with the 
+> `makeTranscriptDbFromGFF()` method. Once you’ve created a transcriptDb object using one of these methods, 
+> you can save the underlying SQLite database with `saveDb()` and load it again with `loadDb()`. As a 
+> demonstration of how easy this is, the following line downloads all required annotation data from Ensembl 
+> to create a transcriptDb object for Platypus:
+> ~~~
+> species <- "oanatinus_gene_ensembl"
+> platypus_txdb <- makeTranscriptDbFromBiomart("ensembl", species)
+> ~~~
+> Although creating transcriptDb directly and saving these objects as SQLite databases certainly works, 
+> GenomicFeatures makes it easy to create a transcript annotation package directly from tracks from the 
+> UCSC Genome Browser, Biomart, or from a transcriptDb object. See the functions `makeTxDbPackageFromUCSC()`, 
+> `makeTxDbPackageFromBiomart()`, and `makeTxDbPackage()`, and the GenomicFeatures vignette or documentation 
+> for more detail on how to use these functions.
+>
+{: .callout}
+
+### rtracklayer package
+
+#### Improting data into a GRanges object
+
+The rtracklayer package includes flexible functions for importing and exporting data that stores 
+ranges from a variety of formats like GTF/GFF, BED, BED Graph, and Wiggle. These functions automatically convert 
+entries to GRanges objects and handle technicalities like missing values and assigning columns in the file to 
+metadata columns—features that general solutions like read.delim() don’t have. Let’s look at how the rtracklayer 
+function `import()` loads the Mus_musculus.GRCm38.75_chr1.gtf.gz file:
+
+```{r}
+library(rtracklayer)
+mm_gtf <- import('../data/Mus_musculus.GRCm38.75_chr1.gtf.gz')
+colnames(mcols(mm_gtf)) # metadata columns read in
+```
+
+The function `import()` detects the file type and imports all data as a GRanges object. There are also 
+specific functions (e.g., `import.bed()`, `import.gff()`, `import.wig()`, etc.) that can you can use if you 
+want to specify the format.
+
+#### Exporting data
+
+The rtracklayer package also provides export methods, for taking range data and saving it to a variety 
+of common range formats. For example, suppose we wanted to write five random pseudogenes to a GTF file. 
+We could use:
+
+```{r}
+set.seed(0)
+pseudogene_i <- which(mm_gtf$gene_biotype == "pseudogene" & mm_gtf$type == "gene")
+pseudogene_sample <- sample(pseudogene_i, 5)
+export(mm_gtf[pseudogene_sample], con="./export/five_random_pseudogene.gtf", format="GTF")
+```
+
+If we didn’t care about the specifics of these ranges (e.g., the information stored in the metadata 
+columns), the BED file format may be more appropriate. BED files require at a minimum three columns: 
+chromosomes (or sequence name), start position, and end position:
+
+```{r}
+bed_data <- mm_gtf[pseudogene_sample]
+mcols(bed_data) <- NULL # clear out metadata columns
+export(bed_data, con="./export/five_random_pseudogene.bed", format="BED")
+```
+
+```{bash}
+cat ./_episodes_rmd/export/five_random_pseudogene.bed
+```
+
+Finally, it’s worth noting that we’re just scratching the surface of rtracklayer’s capabilities. 
+In addition to its import/export functions, rtracklayer also interfaces with genome browsers like 
+UCSC’s Genome Browser. If you find yourself using the UCSC Genome Browser frequently, it’s worth 
+reading the rtracklayer vignette and learning how to interact with it through R.
+
+### Retrieving Promoter Regions: `flank()` and `promoters()`
+
+Suppose we want to extract the promoter regions of all protein-coding genes from the GRCh38 _Mus musculus_ 
+Ensembl GTF annotation track for chromosome 1 we loaded in using rtracklayer in the previous section 
+(it contains additional information about the type of transcript (such as the gene_bio type and type columns). 
+So, first we could find the subset of genes we’re interested in, let’s say all protein coding genes:
+
+```{r}
+table(mm_gtf$gene_biotype) # Calling table() on gene_bioype column returns the number of features of each biotype.
+chr1_pcg <- mm_gtf[mm_gtf$type == "gene" & mm_gtf$gene_biotype == "protein_coding"] #subsetting 
+summary(width(chr1_pcg))
+length(chr1_pcg)
+chr1_pcg_3kb_up <- flank(chr1_pcg, width=3000) #use flank to grab 3kbp upstream of each feature.
+```
+
+By default `flank()` takes strand into consideration (option ignore.strand=FALSE), so we just specify the 
+width of our flanking region.
+
+Extracting promoter regions is such a common operation that GenomicRanges packages have a convenience 
+function to make it even simpler: `promoters()`. `promoters()` default arguments extract 3kbp upstream of 
+each range, and 200bp downstream (but we can change this!):
+
+```{r}
+chr1_pcg_3kb_up2 <- promoters(chr1_pcg, upstream=3000, downstream=0)
+identical(chr1_pcg_3kb_up, chr1_pcg_3kb_up2)
+```
+
+## Retrieving Promoter Sequence: Connection GenomicRanges with Sequence Data
+
+Once we’ve created promoter ranges using `flank()` or `promoters()`, we can use these to grab the promoter 
+nucleotide sequences from a genome. We can do this entirely through Bioconductor's packages, but this approach 
+requires that genome sequences be stored in a special R package. If your organism doesn’t have a premade genome 
+package, it may be faster to write the promoter ranges to a file and use command-line BEDTools.
+
+```{r, eval=FALSE}
+biocLite("BSgenome")
+# Note: this file is about 712MB, so be ensure you have enough disk space before installing!
+biocLite("BSgenome.Mmusculus.UCSC.mm10")
+```
+
+This is a BSgenome package, where BS stands for Biostrings, a Bioconductor package that contains classes 
+for storing sequence data and methods for working with it. BSgenome packages contain the full reference 
+genome for a particular organism, compressed and wrapped in a user-friendly package with common accessor 
+methods. As always, it’s worth reading the vignettes for these packages on Bioconductor’s website.
+
+Let’s first load the BSgenome.Mmusculus.UCSC.mm10 package and poke around:
+
+```{r}
+library(BSgenome.Mmusculus.UCSC.mm10)
+mm_gm <- BSgenome.Mmusculus.UCSC.mm10
+organism(mm_gm)
+providerVersion(mm_gm)
+provider(mm_gm)
+```
+
+We can use the accessor function `seqinfo()` to look at sequence information. BSgenome packages contain 
+sequences for each chromosome, stored in a list-like structure we can access using indexing:
+
+```{r}
+seqinfo(mm_gm)
+mm_gm$chrM
+mm_gm[[22]]
+```
+
+BSgenome objects can be searched using the string-matching and alignment functions in the Biostrings packages. 
+These are meant for a few, quick queries (certainly not large-scale alignment or mapping!). For example:
+
+```{r}
+library(Biostrings)
+matchPattern("GGCGCGCC", mm_gm$chr1)
+```
+
+Using genomic sequence and _Mus musculus_ promoter regions we created in the previous section, 
+we’re ready to extract promoter sequences. 
+
+First, let's check that all sequences we want to grab are in the BSgenome object: 
+
+```{r}
+all(seqlevels(chr1_pcg_3kb_up) %in% seqlevels(mm_gm))
+```
+
+Oops, because the BSgenome.Mmusculus.UCSC.mm10 file uses the UCSC chromosome name style and our 
+annotation file uses Ensembl/NCBI style, this is not the case. Having to remap one chromosome naming 
+scheme to another is quite a common operation as there is no standard chromosome naming scheme. 
+
+First, let’s create a test GRanges object so we can show how we can manually change chromosome names. 
+Bioconductor packages treat sequence names much like the factors. We can access and set the names of these 
+levels using the seqlevels() function:
+
+```{r}
+gr <- GRanges(c("chr1", "chr2"), IRanges(start=c(3, 4), width=10))
+seqlevels(gr)
+seqlevels(gr) <- c("1", "2")
+seqlevels(gr)
+```
+
+Because having to switch between the style “chr1” (UCSC style) and “1” (Ensembl/NCBI style) is common, 
+Bioconductor provides a convenience function `seqlevelsStyle()`:
+
+```{r}
+seqlevelsStyle(chr1_pcg_3kb_up)
+seqlevelsStyle(mm_gm)
+seqlevelsStyle(chr1_pcg_3kb_up) <- "UCSC"
+all(seqlevels(chr1_pcg_3kb_up) %in% seqlevels(mm_gm))
+```
+
+With chromosome names consistent between our GRanges promoter regions and the mouse BSgenome package, 
+it’s easy to grab the sequences for particular regions kept in a GRanges object:
+
+```{r}
+chr1_3kb_seqs <- getSeq(mm_gm, chr1_pcg_3kb_up)
+chr1_3kb_seqs
+```
+
+We could then write these sequences to a FASTA file using:
+
+```{r}
+writeXStringSet(chr1_3kb_seqs, file="./export/mm10_chr1_3kb_promoters.fasta", format="fasta")
+```
+
+It’s worth mentioning that Bioconductor has many other packages for working with promoter sequences, extracting motifs, and creating sequence logo plots. This functionality is well documented in a detailed workflow on the [Bioconductor website](http://www.bioconductor.org/help/workflows/gene-regulation-tfbs/).
+
+## Getting Intergenic and Intronic Regions: `Gaps`, `Reduce`, and `Setdffs`
+
+We already used `gaps()`.  Here we'll apply it to GRanges objects. It is important to consider
+how range operations will work with strand and work across difference chromosomes/sequences. 
+With IRanges, gaps were simple: they’re just the areas of a sequence with a range on them. With 
+genomic ranges, gaps are calculated on every combination of strand and sequence:
+
+```{r}
+gr2 <- GRanges(c("chr1", "chr2"), IRanges(start=c(4, 12), width=6), strand=c("+", "-"), seqlengths=c(chr1=21, chr2=41))
+gr2 # so we can see what these ranges look like
+```
+
+```{r}
+gaps(gr2)
+```
+
+Were did all these gaps come from? When applied to GRanges, `gaps()` creates ranges for all sequences 
+(chr1 and chr2 here) and all strands (+, -, and ambiguous strand *). For sequence-strand combinations 
+without any ranges, the gap spans the entire chromosome.
+
+```{r}
+gr3 <- gr2
+strand(gr3) <- "*"
+gr3
+gaps(gr3)[strand(gaps(gr3)) == "*"]
+```
+
+Replacing strand with the ambiguous strand * is a common trick when we don’t care about keeping strand information.
+
+### Extracting intergenic regions
+
+Another approach to creating gaps using range operations is to use the set operations we discussed earlier. 
+Let's use this approach to extract intergenic regions from all transcripts. This can be thought of as taking 
+a set of ranges that represent entire chromosomes, and taking the set difference of these and all transcripts:
+
+```{r}
+chrom_grngs <- as(seqinfo(txdb), "GRanges") #use the as() method to coerce the TranscriptDb object’s chromosome information into a GRanges object 
+head(chrom_grngs, 2)
+collapsed_tx <- reduce(transcripts(txdb)) #reduce transcripts from txdb, so overlapping transcripts are collapsed into a single range.
+strand(collapsed_tx) <- "*"
+intergenic <- setdiff(chrom_grngs, collapsed_tx) #take the set difference between ranges representing an entire chromosome, and those that represent transcripts on those ranges.
+head(intergenic, 2)
+```
+
+### Extracting introns
+
+We'll now create GRanges objects representing the introns of transcripts. We’re going to do this two ways: 
+first, using a simple convenience function appropriately named `intronsByTranscripts()`, then using range 
+set operations.
+
+#### Quick and easy approach
+
+First, let’s consider the simple solution that uses the TranscriptDb object txdb we loaded earlier:
+
+```{r}
+mm_introns <- intronsByTranscript(txdb)
+head(mm_introns[['18880']], 2) # get first two introns for transcript 18880
+```
+
+#### Manual approach
+
+We’ll now look at the manual approach that teaches really important range manipulations. We’ll make this 
+example simpler by only creating the introns for a single gene, amylase 1 (which from the Ensembl website 
+has gene identifier ENSMUSG00000074264). The set operation approach we’ll take considers introns as the 
+set difference between transcripts range and the exons’ ranges for these transcripts.
+
+```{r}
+amy1 <- transcriptsBy(txdb, 'gene')$ENSMUSG00000074264
+amy1
+```
+
+Now, let's extract all exons from the TranscriptDb object. We will subset out the ones we need for these 
+transcripts later:
+
+```{r}
+mm_exons <- exonsBy(txdb, "tx")
+mm_exons[[18881]]
+```
+
+mm_exons contains all mouse exons, grouped by transcript, but our transcripts are in a single GRanges object 
+(because these are transcripts grouped by gene, and we’re looking at one gene). So we split up transcript 
+ranges into a GRangeList object, this time grouping by transcript identifier:
+
+```{r}
+amy1_tx <- split(amy1, amy1$tx_id)
+amy1_tx
+```
+
+Now we need to extract from mm_exons only the exons belonging to the amylase 1 gene 
+transcripts. A nice feature of GRangesList objects created by the `split()` method is that each list element 
+is given the name of the vector used to split the ranges. Similarly, each list element created by 
+`exonsBy(txdb, "tx")` is also named, using the transcript names (because we used by="tx"). Thus, we can 
+easily match up our transcripts and exons by transcript identifiers, which are the element names of both 
+the GRangesList objects amy1_tx and mm_exons by using `match()`:
+
+```{r}
+amy1_exons <- mm_exons[match(names(amy1_tx), names(mm_exons))]
+amy1_exons
+```
+
+With both our exons and transcripts grouped by transcript, we can finally take the pairwise set 
+difference (with `setdiff())` which creates the set of introns for each transcript. Remember, 
+it’s imperative when using pairwise set functions to make sure your two objects are correctly matched up!
+
+```{r}
+all(names(amy1_tx) == names(amy1_exons)) # check everything's matched up
+amy1_introns <- setdiff(amy1_tx, amy1_exons) #psetdiff in the book did not work
+head(amy1_introns[['18880']], 2) # the first two introns of amylase
+```
+
+Are the introns we created manually for this gene identical to those created by the function intronsByTranscripts()?
+
+```{r}
+identical(mm_introns[names(amy1_tx)], amy1_introns)
+```
+
+### Finding and Working with Overlapping Ranges
+
+Finding and counting overlaps are probably the most important operations in working with GRanges 
+objects and ranges in general. Bioconductor’s GenomicRanges package has functions for finding overlaps, 
+subsetting by overlaps, and counting overlaps that are nearly identical to methods found in the IRanges 
+package.
+
+> ## Mind Your Overlaps (Part II)
+>
+> Overlaps get quite complex very quickly (as discussed in a warning earlier). Nowhere is this more 
+> apparent than with RNA-seq, where many technical issues can make the simple act of estimating transcript 
+> abundance (by counting how many aligned sequencing reads overlap a transcript region) incredibly 
+> complicated. First, counting overlaps in RNA-seq yields quantitative results that are used in downstream 
+> statistical analyses (e.g., the abundance of estimates for a particular transcript). This means that bias 
+> and noise that enter the range overlap quantification process could lead to inaccuracies in differential 
+> expression tests. Second, sequencing reads may align ambiguously—to multiple spots in the genome equally 
+> well. Do we count these multiple mapping reads (sometimes known as “multireads”)? Or discard them entirely? 
+> Some modern RNA-seq quantification methods like RSEM (Li et al., 2011) attempt to rescue these multireads. 
+> Third, some reads may align uniquely, but overlap an exon that’s shared by two or more transcripts’ 
+> isoforms. Should we ignore this read, count it once for each transcript (leading to double counting), 
+> or assign it to a transcript? All of these rather technical decisions in finding and counting overlaps 
+> can unfortunately lead to different biological results. Accurate RNA-seq quantification is still an actively
+> researched area, and methods are still being developed and improving. In general, the methods in this 
+> section are only appropriate for simple overlap operations, and may not be appropriate for quantification 
+> tasks like estimating transcript abundance for RNA-seq.
+>
+{: .callout}
+
+To demonstrate how `findOverlaps()` can be used with GRanges objects, we’ll load in a BED file of 
+dbSNP (build 137) variants (in addition to SNPs, dbSNP also includes other types of variants like 
+insertions/deletions, short tandem repeats, multinucleotide polymorphisms) for mouse chromosome 1 
+(available in the Buffalo's book GitHub repository. Using rtracklayer, we’ll load these in:
+
+```{r, eval=FALSE}
+library(rtracklayer)
+dbsnp137 <- import("../data/mm10_snp137_chr1_trunc.bed.gz")
+```
+
+Suppose we want to find out how many of these variants fall into exonic regions, and how many do not. 
+Using the mouse TranscriptDb object we loaded earlier (txdb) we can extract and collapse all overlapping 
+exons with `reduce()`. We’ll also subset so that we’re only looking at chromosome 1 exons (because our 
+variants are only from chromosome 1):
+
+```{r}
+collapsed_exons <- reduce(exons(txdb), ignore.strand=TRUE)
+chr1_collapsed_exons <- collapsed_exons[seqnames(collapsed_exons) == "chr1"]
+```
+
+Let’s explore our dbsnp137 object before looking for overlaps:
+
+```{r}
+summary(width(dbsnp137))
+dbsnp137$name[which.max(width(dbsnp137))]
+```
+
+The variant that’s 732 bases long is a bit large, so we find out which entry it is and grab its RS identifier. 
+Checking on the [dbSNP website](https://www.ncbi.nlm.nih.gov/projects/SNP/snp_ref.cgi?rs=232497063), we see that 
+this is indeed a real variant — an insertion/deletion on chromosome 1. From our `summary()`, we see 
+that the vast majority of variants are 1 nucleotide long, which are either SNPs or 1 base pair insertons/deletions. 
+Note that the minimum width is zero, hence, there are also variants with zero widths. Using dbsnp137[width(dbsnp137) == 0], 
+we can take look at a few of these. In most cases, these correspond to insertions into the reference genome 
+(these can be easily verified with the dbSNP or UCSC Genome Browser websites). Zero-width ranges will not overlap 
+any feature, as they don’t have any region to overlap another range. To count these zero-width features too, we’ll 
+resize using the `resize()` function:
+
+```{r}
+dbsnp137_resized <- dbsnp137
+zw_i <- width(dbsnp137_resized) == 0
+dbsnp137_resized[zw_i] <- resize(dbsnp137_resized[zw_i], width=1)
+```
+
+With this set of ranges, it’s easy now to find out how many variants overlap our chromosome 1 exon regions. We’ll use findOverlaps() to create a Hits object. We’ll tell `findOverlaps()` to ignore strand:
+
+```{r}
+hits <- findOverlaps(dbsnp137_resized, chr1_collapsed_exons, ignore.strand=TRUE)
+hits
+length(unique(queryHits(hits)))
+length(unique(queryHits(hits)))/length(dbsnp137_resized)
+```
+
+Suppose we now wanted to look at the variants that do overlap these exons. We could do this by using the 
+indices in the Hits object, but a simpler method is to use the method `subsetByOverlaps()`:
+
+```{r}
+subsetByOverlaps(dbsnp137_resized, chr1_collapsed_exons, ignore.strand=TRUE)
+```
+
+Note that the length of this GRanges object matches up with the number of overlapping variants that overlap exons earlier.
+
+GenomicRanges also includes a method for counting overlaps, `countOverlaps()`. So suppose we wanted to count 
+the number of variants that overlap each exonic region. Because we want the counts to be based on the exonic 
+regions (which were the subject ranges in these operations), we reverse the order of the arguments:
+
+```{r}
+var_counts <- countOverlaps(chr1_collapsed_exons, dbsnp137_resized, ignore.strand=TRUE)
+head(var_counts)
+```
+
+To make these easier to follow, let’s append them to our chromosome 1 exonic regions GRanges object as a metadata column:
+
+```{r}
+chr1_collapsed_exons$num_vars <- var_counts
+chr1_collapsed_exons
+```
+
+You can check our analysis by  visiting some of these regions (like “chr1:3054233-3054733”) on the mouse UCSC Genome Browser
+
+### Calculating Coverage of GRanges Objects
+
+The same coverage methods we saw with IRanges also work with GRanges and GRangesList objects. Let’s 
+generate some random fake 150bp reads on chromosome 19 (because it’s the smallest chromosome) of our 
+mouse genome and then empirically measure their coverage. We’ll target 5x coverage. Using the famous 
+Lander-Waterman coverage equation for coverage (C = LN/G, where C is coverage, L is the read length, 
+N is the sequence length, and N is the number of reads), we see that for 150bp reads, a chromosome 
+length of 61,431,566bp, and a target of 5x coverage, we need: 5*61,431,566/150 = 2,047,719 reads. 
+Let’s generate these using R’s sample() function:
+
+```{r}
+set.seed(0)
+chr19_len <- seqlengths(txdb)['chr19']
+chr19_len
+start_pos <- sample(1:(chr19_len-150), 2047719, replace=TRUE)
+reads <- GRanges("chr19", IRanges(start=start_pos, width=150))
+```
+
+Now, let’s use the coverage() method from GenomicRanges to calculate the coverage of these random reads:
+
+```{r}
+cov_reads <- coverage(reads)
+cov_reads
+```
+
+Coverage is calculated per every chromosome in the ranges object, and returned as a run-length encoded 
+list (much like sequence names are returned by `seqnames()` from a GRangesList). We can calculate mean 
+coverage per chromosome easily:
+
+```{r}
+mean(cov_reads)
+```
+
+It’s also easy to calculate how much of this chromosome has no reads covering it (this will happen with 
+shotgun sequencing, due to the random nature of read placement). We can do this two ways. First, we could 
+use == and table():
+
+```{r}
+table(cov_reads == 0)
+```
+
+Or, we could use some run-length encoding tricks (these are faster, and scale to larger data better):
+
+```{r}
+sum(runLength(cov_reads)[runValue(cov_reads) == 0])
+406487/chr19_len
+```
+
+So, about 0.6% of our chromosome 19 remains uncovered. Interestingly, this is very close to the proportion of uncovered bases expected under Lander-Waterman, which is Poisson distributed with λ = c (where c is coverage).
+
+> ## Challenge 3
+>
+> Read the output of `str(gapminder)` again;
+> this time, use what you've learned about factors, lists and vectors,
+> as well as the output of functions like `colnames` and `dim`
+> to explain what everything that `str` prints out for gapminder means.
+> If there are any parts you can't interpret, discuss with your neighbors!
+>
+> > ## Solution to Challenge 3
+> >
+> > The object `gapminder` is a data frame with columns
+> > - `country` and `continent` are factors.
+> > - `year` is an integer vector.
+> > - `pop`, `lifeExp`, and `gdpPercap` are numeric vectors.
+> >
+> {: .solution}
+{: .challenge}

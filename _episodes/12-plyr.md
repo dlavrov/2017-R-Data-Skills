@@ -117,6 +117,50 @@ library(plyr)
 ~~~
 {: .r}
 
+
+
+~~~
+
+Attaching package: 'plyr'
+~~~
+{: .output}
+
+
+
+~~~
+The following object is masked from 'package:ShortRead':
+
+    id
+~~~
+{: .output}
+
+
+
+~~~
+The following object is masked from 'package:XVector':
+
+    compact
+~~~
+{: .output}
+
+
+
+~~~
+The following object is masked from 'package:IRanges':
+
+    desc
+~~~
+{: .output}
+
+
+
+~~~
+The following object is masked from 'package:S4Vectors':
+
+    rename
+~~~
+{: .output}
+
 Plyr has functions for operating on `lists`, `data.frames` and `arrays`
 (matrices, or n-dimensional vectors). Each function performs:
 

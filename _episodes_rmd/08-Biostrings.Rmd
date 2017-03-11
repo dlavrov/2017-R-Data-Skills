@@ -1,0 +1,50 @@
+---
+title: Creating Publication-Quality Graphics
+teaching: 60
+exercises: 20
+questions:
+- "How can I create publication-quality graphics in R?"
+objectives:
+- "To be able to use ggplot2 to generate publication quality graphics."
+- "To understand the basic grammar of graphics, including the aesthetics and geometry layers, adding statistics, transforming scales, and coloring or panelling by groups."
+keypoints:
+- "Use `ggplot2` to create plots."
+- "Think about graphics in layers: aesthetics, geometry, statistics, scale transformation, and grouping."
+---
+
+```{r, include=FALSE}
+source("../bin/chunk-options.R")
+knitr_fig_path("08-")
+# Silently load in the data so the rest of the lesson works
+gapminder <- read.csv("data/gapminder-FiveYearData.csv", header = TRUE)
+```
+
+
+https://www.bioconductor.org/packages/devel/bioc/vignettes/Biostrings/inst/doc/BiostringsQuickOverview.pdf
+
+[cheat]: https://web.stanford.edu/class/bios221/labs/biostrings/lab_1_biostrings.html
+[ggplot-doc]: https://www.bioconductor.org/help/workflows/sequencing/
+
+
+> ## Challenge 5
+>
+> Create a density plot of GDP per capita, filled by continent.
+>
+> Advanced:
+>  - Transform the x axis to better visualise the data spread.
+>  - Add a facet layer to panel the density plots by year.
+>
+> > ## Solution to challenge 5
+> >
+> > Create a density plot of GDP per capita, filled by continent.
+> >
+> > Advanced:
+> >  - Transform the x axis to better visualise the data spread.
+> >  - Add a facet layer to panel the density plots by year.
+> >
+> > ```{r ch5-sol}
+> > ggplot(data = gapminder, aes(x = gdpPercap, fill=continent)) +
+> >  geom_density(alpha=0.6) + facet_wrap( ~ year) + scale_x_log10()
+> > ```
+> {: .solution}
+{: .challenge}

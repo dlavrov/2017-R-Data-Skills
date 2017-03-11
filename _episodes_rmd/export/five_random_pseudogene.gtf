@@ -1,0 +1,8 @@
+##gff-version 2
+##source-version rtracklayer 1.34.2
+##date 2017-03-11
+1	pseudogene	gene	165148824	165148949	.	-	.	gene_id "ENSMUSG00000089967"; gene_name "Gm16550"; gene_source "havana"; gene_biotype "pseudogene";
+1	pseudogene	gene	46011547	46012266	.	-	.	gene_id "ENSMUSG00000090682"; gene_name "Gm3852"; gene_source "ensembl_havana"; gene_biotype "pseudogene";
+1	pseudogene	gene	62656695	62657788	.	-	.	gene_id "ENSMUSG00000081950"; gene_name "Gm11600"; gene_source "havana"; gene_biotype "pseudogene";
+1	pseudogene	gene	85159764	85194260	.	+	.	gene_id "ENSMUSG00000089716"; gene_name "Gm6264"; gene_source "havana"; gene_biotype "pseudogene";
+1	pseudogene	gene	164166579	164166933	.	+	.	gene_id "ENSMUSG00000089790"; gene_name "Gm16588"; gene_source "havana"; gene_biotype "pseudogene";

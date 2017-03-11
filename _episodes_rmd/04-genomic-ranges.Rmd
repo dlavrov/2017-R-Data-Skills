@@ -1,0 +1,273 @@
+---
+title: "Genomic Ranges"
+teaching: 40
+exercises: 15
+questions:
+- "How can I read data in R?"
+- "What are the basic data types in R?"
+- "How do I represent categorical information in R?"
+objectives:
+- "To be aware of the different types of data."
+- "To begin exploring data frames, and understand how it's related to vectors, factors and lists."
+- "To be able to ask questions from R about the type, class, and structure of an object."
+keypoints:
+- "Use `read.csv` to read tabular data in R."
+- "The basic data types in R are double, integer, complex, logical, and character."
+- "Use factors to represent categories in R."
+---
+
+```{r, include=FALSE}
+source("../bin/chunk-options.R")
+knitr_fig_path("04-")
+library(GenomicRanges)
+```
+
+Because GenomicRanges extends IRanges, everything we’ve learned in the previous lesson can be directly 
+applied to the genomic version of an IRanges object, GRanges. None of the function names nor behaviors 
+differ much, besides two added complications: dealing with multiple chromosomes and strand. As we’ll 
+see here, GenomicRanges manages these complications and greatly simplifies our lives when working with genomic data.
+
+## Storing Genomic Ranges with GenomicRanges
+
+The GenomicRanges package introduces a new class called GRanges for storing genomic ranges. The 
+GRanges builds off of IRanges. IRanges objects are used to store ranges of genomic regions on a 
+single sequence, and GRanges objects contain the two other pieces of information necessary to 
+specify a genomic location: sequence name (e.g., which chromosome) and strand. GRanges objects 
+also have metadata columns, which are the data linked to each genomic range. We can create GRanges 
+objects much like we did with IRanges objects:
+
+```{r}
+library(GenomicRanges)
+gr <- GRanges(seqname=c("chr1", "chr1", "chr2", "chr3"),
+                    ranges=IRanges(start=5:8, width=10),
+                    strand=c("+", "-", "-", "+"))
+gr
+```
+
+Using the GRanges() constructor, we can also add arbitrary metadata columns by specifying 
+additional named arguments:
+
+```{r}
+gr <- GRanges(seqname=c("chr1", "chr1", "chr2", "chr3"), ranges=IRanges(start=5:8, width=10),
+                    strand=c("+", "-", "-", "+"), gc=round(runif(4), 3))
+gr
+```
+
+This illustrates the structure of GRanges objects: genomic location specified by sequence name, 
+range, and strand (on the left of the dividing bar), and metadata columns (on the right). 
+Each row of metadata corresponds to a range on the same row.
+
+All metadata attached to a GRanges object are stored in a DataFrame, which behaves identically to 
+R’s base data.frame, but supports a wider variety of column types.
+
+Whereas in the preceding example metadata columns are used to store numeric data, in practice we can 
+store any type of data: identifiers and names (e.g., for genes, transcripts, SNPs, or exons), 
+annotation data (e.g., conservation scores, GC content, repeat content, etc.), or experimental data 
+(e.g., if ranges correspond to alignments, data like mapping quality and the number of gaps)
+
+Also, notice seqlengths in the gr object we’ve just created. Because GRanges (and genomic range data 
+in general) is always with respect to a particular genome version, we usually know beforehand what 
+the length of each sequence/chromosome is.
+
+We can specify the sequence lengths in the GRanges constructor, or set it after the object has been 
+created using the seqlengths() function:
+
+```{r}
+seqlens <- c(chr1=152, chr2=432, chr3=903)
+gr <- GRanges(seqname=c("chr1", "chr1", "chr2", "chr3"),
+              ranges=IRanges(start=5:8, width=10),
+              strand=c("+", "-", "-", "+"),
+              gc=round(runif(4), 3),
+              seqlengths=seqlens)
+seqlengths(gr) <- seqlens # another way to do the same as above
+gr
+seqlengths(gr)
+```
+
+We access data in GRanges objects much like we access data from IRanges objects: with accessor functions:
+
+```{r}
+# Same as with IRanges
+start(gr)
+end(gr)
+width(gr)
+# GRanges-specific
+seqnames(gr)
+strand(gr)
+```
+
+The returned objects are all run-length encoded. If we wish to extract all IRanges ranges from a GRanges 
+object, we can use the ranges accessor function:
+
+```{r}
+ranges(gr)
+```
+
+Like most objects in R, GRanges has a length that can be accessed with `length()`, and supports names:
+
+```{r}
+length(gr)
+names(gr) <- letters[1:length(gr)]
+gr
+```
+
+GRanges objects support the same style of subsetting as other R objects. For example, if you wanted all 
+ranges with a start position greater than 7, you can use:
+
+```{r}
+gr[start(gr) > 7] # where you use the T/F index created by `start(gr) > 7`:
+start(gr) > 7
+```
+
+Using the seqname() accessor, we can count how many ranges there are per chromosome and then subset to 
+include only ranges for a particular chromosome:
+
+```{r}
+table(seqnames(gr))
+gr[seqnames(gr) == "chr1"]
+```
+
+The mcols() accessor is used access metadata columns:
+
+```{r}
+mcols(gr)
+```
+
+Because this returns a DataFrame and DataFrame objects closely mimic data.frame, $ works to access 
+specific columns. The usual syntactic shortcut for accessing a column works too:
+
+```{r}
+mcols(gr)$gc
+gr$gc
+```
+
+The real power of GRanges comes from combining subsetting with the data kept in our metadata columns. 
+For example, we could easily compute the average GC content of all ranges on chr1:
+
+```{r}
+mcols(gr[seqnames(gr) == "chr1"])$gc
+mean(mcols(gr[seqnames(gr) == "chr1"])$gc)
+```
+
+If we wanted to find the average GC content for all chromosomes, we would use the same split-apply-combine 
+strategy we learned before.
+
+## Grouping Data with GRangesList
+
+R’s lists can be used to group data together, such as after using split() to split a dataframe by a 
+factor column. Grouping data this way is useful for both organizing data and processing it in chunks. 
+GRanges objects also have their own version of a list, called GRangesList, which are similar to R’s 
+lists. GRanges Lists can be created manually:
+
+```{r}
+gr1 <- GRanges(c("chr1", "chr2"), IRanges(start=c(32, 95), width=c(24, 123)))
+gr2 <- GRanges(c("chr8", "chr2"), IRanges(start=c(27, 12), width=c(42, 34)))
+grl <- GRangesList(gr1, gr2)
+grl
+```
+
+GRangesList objects behave almost identically to R’s lists:
+
+```{r}
+# unlist() combines all GRangesList elements into a single GRanges object:
+unlist(grl)
+# we can combine many GRangesList objects with c():
+doubled_grl <- c(grl, grl)
+length(doubled_grl)
+```
+
+Like lists, we can also give and access list element names with the function names(). GRangesList 
+objects also have some special features. For example, accessor functions for GRanges data (e.g., 
+`seqnames()`, `start()`, `end()`, `width()`, `ranges()`, `strand()`, etc.) also work on GRangesList objects:
+
+```{r}
+seqnames(grl)
+start(grl)
+```
+
+Note the class of object Bioconductor uses for each of these: RleList and Integer List, which are
+are analogous to GRangesList: a list for a specific type of data. RleList are lists for run-length 
+encoded vectors, and IntegerList objects are lists for integers (with added features). 
+
+In practice, we’re usually working with too much data to create GRanges objects manually with GRangesList(). 
+More often, GRangesLists come about as the result of using the function split() on GRanges objects: 
+
+```{r}
+chrs <- c("chr3", "chr1", "chr2", "chr2", "chr3", "chr1")
+gr <- GRanges(chrs, IRanges(sample(1:100, 6, replace=TRUE),
+                    width=sample(3:30, 6, replace=TRUE)))
+gr
+```
+
+And now splitting it:
+
+```{r}
+gr_split <- split(gr, seqnames(gr))
+gr_split[[1]]
+names(gr_split)
+```
+
+Bioconductor also provides an `unsplit()` method to rejoin split data on the same factor that was 
+used to split it. For example, because we created gr_split by splitting on seqnames(gr), we could 
+unsplit gr_split with `unsplit(gr_split, seqnames(gr))`:
+
+```{r}
+unsplit(gr_split, seqnames(gr))
+```
+
+Grouped data is the basis of the split-apply-combine pattern. We can use `lapply()` and `sapply()` 
+on GRangesLists objects to iterate through all elements and apply a function:
+
+```{r}
+# Return the order of widths (smallest range to largest) of each GRanges element in a GRangesList.
+lapply(gr_split, function(x) order(width(x)))
+# Return the start position of the earliest (leftmost) range:
+sapply(gr_split, function(x) min(start(x)))
+# The number of ranges in every GRangesList object can be returned with this R idiom:
+sapply(gr_split, length)
+# A faster approach to calculating element lengths is with the specialized function `elementLengths()`:
+elementNROWS(gr_split)
+```
+
+Although `lapply()` and `sapply()` give you the most freedom to write and use your own functions to 
+apply to data. However, for many overlap operation functions (e.g., `reduce()`, `flank()`, `coverage()`, 
+and `findOverlaps()`), we don’t need to explicitly apply them - they can work directly with GRangesList 
+objects. For example, reduce() called on a GRangesList object automatically works at the list-element level:
+
+```{r}
+reduce(gr_split)
+```
+
+reduce() illustrates an important (and extremely helpful) property of GRangesList objects: many methods 
+applied to GRangesList objects work at the grouped-data level automatically.
+
+
+> ## Challenge 7
+>
+> Consider the R output of the matrix below:
+> ```{r, echo=FALSE}
+> matrix(c(4, 1, 9, 5, 10, 7), ncol = 2, byrow = TRUE)
+> ```
+> What was the correct command used to write this matrix? Examine
+> each command and try to figure out the correct one before typing them.
+> Think about what matrices the other commands will produce.
+>
+> 1. `matrix(c(4, 1, 9, 5, 10, 7), nrow = 3)`
+> 2. `matrix(c(4, 9, 10, 1, 5, 7), ncol = 2, byrow = TRUE)`
+> 3. `matrix(c(4, 9, 10, 1, 5, 7), nrow = 2)`
+> 4. `matrix(c(4, 1, 9, 5, 10, 7), ncol = 2, byrow = TRUE)`
+>
+> > ## Solution to Challenge 7
+> >
+> > Consider the R output of the matrix below:
+> > ```{r, echo=FALSE}
+> > matrix(c(4, 1, 9, 5, 10, 7), ncol = 2, byrow = TRUE)
+> > ```
+> > What was the correct command used to write this matrix? Examine
+> > each command and try to figure out the correct one before typing them.
+> > Think about what matrices the other commands will produce.
+> > ```{r, eval=FALSE}
+> > matrix(c(4, 1, 9, 5, 10, 7), ncol = 2, byrow = TRUE)
+> > ```
+> {: .solution}
+{: .challenge}
