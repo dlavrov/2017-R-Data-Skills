@@ -1,0 +1,447 @@
+---
+title: "Working with Mitochondrial proteome"
+teaching: 60
+exercises: 30
+questions:
+- "How can I use Genomic Ranges with real data?"
+objectives:
+- "Be able to retreive genomic regions "
+- "Be able to group genomic regions"
+- "Be able to append two data frames"
+- "Be able to articulate what a `factor` is and how to convert between `factor` and `character`."
+- "Be able to find basic properties of a data frames including size, class or type of the columns, names, and first few rows."
+keypoints:
+- "Use `cbind()` to add a new column to a data frame."
+- "Use `rbind()` to add a new row to a data frame."
+- "Remove rows from a data frame."
+- "Use `na.omit()` to remove rows from a data frame with `NA` values."
+- "Use `levels()` and `as.character()` to explore and manipulate factors"
+- "Use `str()`, `nrow()`, `ncol()`, `dim()`, `colnames()`, `rownames()`, `head()` and `typeof()` to understand structure of the data frame"
+- "Read in a csv file using `read.csv()`"
+- "Understand `length()` of a data frame"
+---
+
+```{r, include=FALSE}
+source("../bin/chunk-options.R")
+knitr_fig_path("05-")
+library(GenomicRanges)
+
+library(rtracklayer)
+
+library(BSgenome)
+
+```
+
+## Installing a bunch of human packages. 
+
+(We can check which annotation packages are available on the [Bioconductor annotation package page](http://www.bioconductor.org/packages/release/data/annotation/)):
+
+```{r, eval=FALSE}
+library(BiocInstaller)
+biocLite("EnsDb.Hsapiens.v86") #Load the latest version of human genome
+biocLite("SNPlocs.Hsapiens.dbSNP144.GRCh38") #Load the lastest version of human SNPs
+biocLite("BSgenome.Hsapiens.UCSC.hg38") #human genome
+biocLite("TxDb.Hsapiens.UCSC.hg38.knownGene") #already installed
+```
+
+Now we can start working with the data:
+
+```{r}
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
+txdb
+class(txdb)
+```
+
+Under the hood, the transcriptDb object represents a SQLite database contained inside this R package. We 
+don’t need to know any SQLite to interact with and extract data from this object; the GenomicFeatures package 
+provides all methods we’ll need.
+
+### Retrieving genomic regions using `genes()`, `transcripts()`, `exons()`, `cds()`, and `promoters()`
+
+Suppose we wanted to access all gene regions in _Mus musculus_ (in this version of Ensembl annotation). 
+There’s a simple accessor function for this, unsurprisingly named `genes()`:
+
+```{r}
+hs_genes <- genes(txdb)
+hs_cds <- cds(txdb)
+hs_transcripts <- transcripts(txdb)
+head(hs_genes)
+head(hs_cds)
+head(cs_transcripts)
+length(hs_genes) #shows gene id as metadata
+length(hs_cds) #shows cds id as metadata
+head(hs_transcripts) #shows transcript id and transcript name
+## haven't tried exons and promoters
+## Consult the documentation for this family of functions for extracting information from transcriptDb objects at `help(transcripts)`.
+```
+
+### Grouping GRangesList objects using `transcriptsBy()`, `exonsBy()`, `cdsBy()`, `intronsBy()`, 
+`fiveUTRsByTranscript()`, and `threeUTRsByTranscript()`.
+
+It’s often more natural to work with a GRangesList object of these types of features grouped by some other type of feature than working with a massive GRanges list object of everything. For example, we might want to retrieve all exons grouped by transcript or gene:
+
+```{r}
+hs_cds_by_gn <- cdsBy(txdb, by="gene")
+help(transcriptsBy)
+length(hs_cds_by_gn)
+head(hs_cds_by_gn, 100)
+hs_cds_by_gn
+```
+
+These functions that extract grouped features all take the transcriptDb object as their first argument 
+and which type of feature to group by (e.g., gene, tx, exon, or cds) as their second argument. There 
+are variety of these types of functions:  (see `help(transcriptsBy)` for more information).
+
+#### Retrieving genomic regions for mitochondrial genes
+
+
+
+
+
+### USING KEGG
+
+```{r}
+biocLite("KEGG.db")
+library(KEGG.db)
+pathways <- toTable(KEGGPATHNAME2ID)
+pathways[grepl("cancer", pathways$path_name, fixed=TRUE),]
+```
+
+## Getting the CDS and UTR sequences of mitochondrial genes
+
+### 1 Building gene lists
+
+* lists for complete mitoproteome (mitocarta, mito)
+* lists based on KEGG pathways
+* list of mitochondrial (protein) genes
+
+#### Proteome lists; hs_mitocarta_gn & hs_mtproteome_gn
+
+**Mitocarta 2.0**:
+
+```{r}
+hs_mitocarta_gn <- read.csv(file = "/Users/dlavrov/Documents/GitHub/MtProteome/Human.MitoCarta2.0.csv")
+head(hs_mitocarta_gn)
+```
+
+**Mitoproteome2**:
+
+```{r}
+hs_mtproteome_gn <- read.table(file = "/Users/dlavrov/Documents/GitHub/MtProteome/mitoproteome.txt", header = TRUE, sep = "\t")
+head(hs_mtproteome_gn)
+```
+
+#### KEGG lists
+
+Such list can be created with the KEGG.db and KEGGgraph packages. Updates to the data in the KEGG.db 
+package are no longer available, however, the resource is still useful for identifying pathway names 
+and ids. Create a table of KEGG pathways and ids and search on the term ‘mitochondrial’.
+
+```{r}
+library(KEGG.db)
+pathways <- toTable(KEGGPATHNAME2ID)
+pathways[grepl("Oxidative phosphorylation", pathways$path_name, fixed=TRUE),]
+head(pathways)
+```
+
+Use the ”00190” id to query the KEGG web resource (accesses the currently maintained data).
+Similarly, can use "00020" to get the genes in Citrate cycle (TCA cycle)
+
+#############
+Tried KEGGgraph but got some strange results so the following section is kept only for historical reasons
+##############
+
+Using the **KEGGREST** package (A package that provides a client interface to the KEGG
+REST server.)
+
+**Ox-phos genes**
+```{r}
+#biocLite("KEGGREST")
+library(KEGGREST)
+temp <- keggGet("hsa00190")[[1]]$GENE
+hs_00190_gn <- keggGet("hsa00190")[[1]]$GENE[c(TRUE,FALSE)] # needed the T/F index to get read of gene description in alternative rows.
+length(hs_00190_gn) # 133 genes
+absent <- hs_00190_gn[!hs_00190_gn %in% Human.MitoCarta2.0$HumanGeneID] # 32 not in MitoCarta
+hs_oxph_mc_gn <- hs_00190_gn[hs_00190_gn %in% Human.MitoCarta2.0$HumanGeneID] # 101 in MitoCarta
+hs_oxph_gn_df <- data.frame(temp[c(TRUE,FALSE)],temp[c(FALSE,TRUE)])
+colnames(hs_oxph_gn) <- c("gene_id","description")
+head(hs_oxph_gn)
+hs_oxph_gn[hs_oxph_gn$gene_id %in% absent,2] ## mostly ATPase transporting subunits
+```
+
+**TCA (Citrate cycle) genes**
+
+```{r}
+library(KEGGREST)
+hs_00020_gn <- keggGet("hsa00020")[[1]]$GENE[c(TRUE,FALSE)] # needed the T/F index to get read of gene description in alternative rows.
+length(hs_00020_gn) ## 30 genes
+hs_00020_gn[!hs_00020_gn %in% Human.MitoCarta2.0$HumanGeneID] # 1 (5105) not in MitoCarta
+```
+
+**Apoptosis (hsa04210) genes in mitocarta**
+
+```{r}
+hs_04210_gn <- keggGet("hsa04210")[[1]]$GENE[c(TRUE,FALSE)]
+hs_04210_mc_gn <- hs_04210_gn[hs_04210_gn %in% hs_mitocarta_gn$HumanGeneID]
+hs_04210_mc_gn
+```
+
+
+#### mtDNA encoded genes: hs_mtDNA_gn
+
+```{r}
+#biocLite("org.Hs.eg.db") #an R object that contains mappings between Entrez Gene identifiers and GenBank accession numbers.
+library(org.Hs.eg.db)
+columns(org.Hs.eg.db) #shows you what's there
+help('select') #tells you how to access this db
+allMTGenesOrgDb <- select(org.Hs.eg.db, keys=keys(org.Hs.eg.db), columns="CHR")
+allMTGenesOrgDb <- as.character(allMTGenesOrgDb$ENTREZID[allMTGenesOrgDb$CHR %in% "MT"])
+allMTGenesOrgDb ## includes all RNA genes
+hs_mtDNA_gn <- allMTGenesOrgDb[allMTGenesOrgDb %in% Human.MitoCarta2.0$HumanGeneID]
+hs_mtDNA_gn
+```
+
+But the following are not:
+
+```{r}
+hs_not_in_txdb[!hs_not_in_txdb %in% allMTGenesOrgDb]
+```
+
+### 2. Identify genomic coordinates
+
+The list of gene ids is used to extract genomic positions of the regions of interest. 
+The Known Gene table from UCSC will be the annotation and is available as a Bioconductor package.
+
+
+```{r}
+#library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
+txdb
+```
+
+First, we need to identify the transcripts corresponding to each gene. The transcript id (or name)
+is used to isolate the UTR and coding regions of interest. This grouping of transcript by gene is also used to re-group
+the final sequence results.
+
+The `transcriptsBy` function outputs both the gene and transcript identifiers which we use to create 
+a map between the two. The map is a CharacterList with gene ids as names and transcript ids as the list elements.
+
+```{r}
+txbygene <- transcriptsBy(txdb, "gene")[op_genes] ## throws an error because some genes are not there
+hs_genes <- genes(txdb)
+op_genes[!op_genes %in% hs_genes$gene_id] ## check which genes are not there
+txbygene <- transcriptsBy(txdb, "gene")[hs_00190_gn[hs_00190_gn %in% hs_genes$gene_id]] ## uses only genes that are there
+map <- relist(unlist(txbygene, use.names=FALSE)$tx_id, txbygene)
+map
+```
+
+```{r}
+### MITOCARTA ###
+hs_mt_genes <- hs_genes[hs_genes$gene_id %in% hs_mitocarta_gn$HumanGeneID]
+head(hs_mt_genes)
+length(hs_mt_genes)
+### 1109 hmmm
+hs_nuc_genes <- hs_genes[!hs_genes$gene_id %in% hs_mitocarta_gn$HumanGeneID]
+length(hs_nuc_genes)
+#### which mitocarta genes are not in the latest transcriptome dataset
+hs_not_in_txdb <- sort(hs_mitocarta_gn$HumanGeneID[!hs_mitocarta_gn$HumanGeneID %in% hs_genes$gene_id])
+
+### OX-PHOS ###
+hs_op_gr <- hs_genes[hs_genes$gene_id %in% hs_00190_gn]
+head(hs_op_gr)
+```
+
+
+#### Extract the UTR and coding regions for all(!) genes.
+
+```{r}
+cds <- cdsBy(txdb, "tx")
+threeUTR <- threeUTRsByTranscript(txdb)
+fiveUTR <- fiveUTRsByTranscript(txdb)
+```
+
+Coding and UTR regions may not be present for all transcripts specified in map. Consequently, the subset results will not
+be the same length. This length discrepancy must be taken into account when re-listing the final results by gene.
+
+```{r}
+txid <- unlist(map, use.names=FALSE)
+cds <- cds[names(cds) %in% txid]
+threeUTR <- threeUTR[names(threeUTR) %in% txid]
+fiveUTR <- fiveUTR[names(fiveUTR) %in% txid]
+```
+
+Note the different lengths of the subset regions.
+
+```{r}
+length(txid) ## all possible transcripts
+length(cds)
+length(threeUTR)
+length(fiveUTR)
+```
+
+These objects are GRangesLists with the transcript id as the outer list element.
+
+```{r}
+cds
+```
+
+### 3. Finding chromosomal locations
+
+Using GenomicFeatures for extracting subsets of features that overlap a specific 
+chromosome or range.
+
+```{r}
+seqlevels(txdb)
+standard_chromosomes <- paste("chr",1:22,sep = "")
+standard_chromosomes <- append(standard_chromosomes, c("chrX", "chrY"))
+seqlevels(txdb, force=TRUE) <- standard_chromosomes
+seqlevels(txdb)
+#txdb <- restoreSeqlevels(txdb) # restore txdb so it queries all sequences
+```
+
+```{r}
+# Calculating and plotting a number of genes per chromosome (and chromosome length)
+## optional, if you want a genomic order of the chromosomes
+genesPerChromosome <- function (x, warn=TRUE) {
+  ## A function that maps genes to chromosomes
+  x = sortSeqlevels(x)
+  seqlevels(x, force=TRUE) <- standard_chromosomes
+  ## split into a GRangesList
+  ## where each element has all ranges for one chromosome
+  grl = split(x, seqnames(x))
+  ## apply a function to the ranges of each chromosome
+  print(sapply(grl, length))
+  sum(sapply(grl, length))
+  len = round(seqlengths(grl)/1000000)
+  df <- data.frame(c(sapply(grl, length)), len)
+  df <- df[c(2,1)]
+  #### something weird: it does not work the other way around:
+  #df <- data.frame(c(seqlengths(grl):1000000, sapply(grl, length)))
+  colnames(df)=c("chr_length (Mb)","gene_num")
+  plot(df)
+}
+genesPerChromosome(hs_op_gr)
+genesPerChromosome(hs_mt_genes)
+```
+
+#######
+Should we be surprised that all chromosomes have genes involved in OX_Phos?
+#######
+
+
+### 4. Plotting chromosomal locations using chromPlot package
+
+```{r}
+biocLite("chromPlot")
+library("chromPlot")
+data(hg_gap)
+head(hg_gap)
+chromPlot(gaps=hg_gap, annot1=hs_op_gr)
+chromPlot(gaps=hg_gap, bands=hg_cytoBandIdeo, annot1=hs_mt_genes, figCols=6)
+```
+
+
+
+### 3. Extract sequences from BSgenome
+
+The BSgenome packages contain complete genome sequences for a given organism.
+Load the BSgenome package for _Homo sapiens_.
+
+```{r}
+hs_gm <- BSgenome.Hsapiens.UCSC.hg38 ## done previously
+```
+Use extractTranscriptSeqs to extract the UTR and coding regions from the BSgenome. This function 
+retrieves the sequences for an any GRanges or GRangesList (i.e., not just transcripts like the name implies).
+
+```{r}
+threeUTR_seqs <- extractTranscriptSeqs(hs_gm, threeUTR)
+fiveUTR_seqs <- extractTranscriptSeqs(hs_gm, fiveUTR)
+cds_seqs <- extractTranscriptSeqs(hs_gm, cds)
+```
+
+The return values are DNAStringSet objects.
+
+```{r}
+cds_seqs
+```
+
+
+Our final step is to collect the coding and UTR regions (currently organzied by transcript) into groups by gene id. The
+relist function groups the sequences of a DNAStringSet object into a DNAStringSetList object, based on the specified
+skeleton argument. The skeleton must be a list-like object and only its shape (i.e. its element lengths) matters (its
+exact content is ignored). A simple form of skeleton is to use a partitioning object that we make by specifying the size
+of each partition. The partitioning objects are different for each type of region because not all transcripts had a coding
+or 3’ or 5’ UTR region defined.
+
+```{r}
+lst3 <- relist(threeUTR_seqs, PartitioningByWidth(sum(map %in% names(threeUTR))))
+lst5 <- relist(fiveUTR_seqs, PartitioningByWidth(sum(map %in% names(fiveUTR))))
+lstc <- relist(cds_seqs, PartitioningByWidth(sum(map %in% names(cds))))
+lstc
+```
+
+There are 40 genes in map each of which have 1 or more transcripts. The table of element lengths shows how many
+genes have each number of transcripts. For example, 47 genes have 1 transcript, 48 genes have 2 etc.
+
+```{r}
+length(map)
+table((elementNROWS(map)))
+```
+
+
+The lists of DNA sequences all have the same length as map but one or more of the element lengths may be zero. This
+would indicate that data were not available for that gene. The tables below show that there was at least 1 coding region
+available for all genes (i.e., none of the element lengths are 0). However, both the 3’ and 5’ UTR results have element
+lengths of 0 which indicates no UTR data were available for that gene.
+
+```{r}
+table(elementNROWS(lstc))
+table(elementNROWS(lst3))
+names(lst3)[elementNROWS(lst3) == 0L] ## genes with no 3✬ UTR data
+table(elementNROWS(lst5))
+names(lst5)[elementNROWS(lst5) == 0L] ## genes with no 5✬ UTR data
+```
+
+
+#### Retrieving genomic regions for mitochondiral genes from human genome
+
+```{r, eval=FALSE}
+library(BSgenome)
+library(BSgenome.Hsapiens.UCSC.hg38)
+```
+
+This is a BSgenome package, where BS stands for Biostrings, a Bioconductor package that contains classes 
+for storing sequence data and methods for working with it. BSgenome packages contain the full reference 
+genome for a particular organism, compressed and wrapped in a user-friendly package with common accessor 
+methods. As always, it’s worth reading the vignettes for these packages on Bioconductor’s website.
+
+```{r}
+hs_gm <- BSgenome.Hsapiens.UCSC.hg38
+organism(hs_gm)
+providerVersion(hs_gm)
+provider(hs_gm)
+```
+
+```{r}
+str(hs_gm)
+seqinfo(hs_gm)
+```
+
+### Retrieving the regions
+
+```{r}
+mcarta_seq <- getSeq(hs_gm, hs_mt_cds)
+mcarta_seq
+```
+
+
+Wow, that was easy!
+
+
+
+
+
+
+
+
